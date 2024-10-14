@@ -7,29 +7,29 @@ CYCLES measure_one_block_access_time(ADDR_PTR addr)
     CYCLES cycles;
 
     asm volatile("mov %1, %%r8\n\t"
-    "lfence\n\t"
-    "rdtsc\n\t"
-    "mov %%eax, %%edi\n\t"
-    "mov (%%r8), %%r8\n\t"
-    "lfence\n\t"
-    "rdtsc\n\t"
-    "sub %%edi, %%eax\n\t"
-    : "=a"(cycles) /*output*/
-    : "r"(addr)
-    : "r8", "edi"); 
+                 "lfence\n\t"
+                 "rdtsc\n\t"
+                 "mov %%eax, %%edi\n\t"
+                 "mov (%%r8), %%r8\n\t"
+                 "lfence\n\t"
+                 "rdtsc\n\t"
+                 "sub %%edi, %%eax\n\t"
+                 : "=a"(cycles) /*output*/
+                 : "r"(addr)
+                 : "r8", "edi");
 
     return cycles;
 }
 
 /*
  * CLFlushes the given address.
- * 
+ *
  * Note: clflush is provided to help you debug and should not be used in your
  * final submission
  */
 void clflush(ADDR_PTR addr)
 {
-    asm volatile ("clflush (%0)"::"r"(addr));
+    asm volatile("clflush (%0)" ::"r"(addr));
 }
 
 /*
@@ -96,7 +96,62 @@ char *binary_to_string(char *data)
 /*
  * Converts a string to integer
  */
-int string_to_int(char* s) 
+int string_to_int(char *s)
 {
     return atoi(s);
+}
+
+// Function to add a new node to the end of the linked list
+void add_to_ll(uint64_t addr, struct Node **ll)
+{
+    // If the list is empty, create a new node and set it as the head
+    if (*ll == NULL)
+    {
+        *ll = (struct Node *)malloc(sizeof(struct Node));
+        assert(*ll != NULL && "Memory allocation failed!");
+        (*ll)->addr = addr;
+        (*ll)->next = NULL;
+        return;
+    }
+
+    // If the list is not empty, traverse to the last node
+    struct Node *nodeIter = *ll;
+    while (nodeIter->next != NULL)
+    {
+        nodeIter = nodeIter->next;
+    }
+
+    // Create a new node and append it to the end of the list
+    struct Node *newNode = (struct Node *)malloc(sizeof(struct Node));
+    assert(newNode != NULL && "Memory allocation failed!");
+    newNode->addr = addr;
+    newNode->next = NULL;
+
+    // Link the new node to the last node
+    nodeIter->next = newNode;
+}
+
+uint64_t get_set_index_from_virt_addr(uint64_t virt_addr)
+{
+    return (virt_addr >> L2_BYTES_PER_LINE_LOG2) & L2_SETS_LOG2;
+}
+
+void create_eviction_set(struct setup *setupStruct, int setNum)
+{
+    int ll_len = 0;
+    // int setNum = setupStruct->startComSet;
+    struct Node *eviction_ll = NULL;
+    for (int set = 0; set < L2_SETS; set++)
+        for (int line = 0; line < L2_LINES_PER_SET; line++)
+        {
+            uint64_t virt_addr = (uint64_t)(setupStruct->eviction_buffer) + set * (L2_BYTES_PER_LINE * L2_LINES_PER_SET) + line * L2_BYTES_PER_LINE;
+            if (get_set_index_from_virt_addr(virt_addr) == setNum)
+            {
+                ll_len++;
+                add_to_ll(virt_addr, &eviction_ll);
+            }
+        }
+    // setupStruct->eviction_ll = eviction_ll;
+    return eviction_ll;
+    // printf("ll_len %d\n",ll_len);
 }

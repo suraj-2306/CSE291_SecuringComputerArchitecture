@@ -1,1 +1,9 @@
-._*
+.vscode
+build
+graphs
+data
+main
+main-visual
+with*
+output*
+*.o
