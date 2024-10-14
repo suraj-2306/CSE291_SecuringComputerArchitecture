@@ -5,68 +5,71 @@
 int receive_bit(struct setup *setup)
 {
     struct Node *currentNode;
-    currentNode = setup->eviction_ll;
+    // currentNode = setup->eviction_ll;
 
-    for(volatile int setNum;setNum<2;setNum++){
-        clock_t start_t, curr_t, end_t;
-    volatile int totalTime = 0;
-    volatile int cacheLineAccess = 5, cacheLineAccessIter = 0;
-
-    // prime stage
-    start_t = clock();
-    while (currentNode != NULL && clock() - start_t < setup->primeTimeWait && cacheLineAccessIter < cacheLineAccess)
+    int misses[2] = {0, 0}, hits[2] = {0, 0};
+    for (volatile int setNum = 0; setNum < 2; setNum++)
     {
-        cacheLineAccessIter++;
-        volatile uint64_t addr1 = currentNode->addr;
-        one_block_access(addr1);
-        currentNode = currentNode->next;
-    };
-
-    // acccess interval
-    start_t = clock();
-    while (clock() - start_t < (setup->accessTimeWait))
-    {
-    };
-
-    // probe stage
-    int misses = 0, hits = 0;
-    volatile uint64_t accessTime[4];
-
-    cacheLineAccess = 4;
-    cacheLineAccessIter = 0;
-    start_t = clock();
-    while (currentNode != NULL && (clock() - start_t < setup->probeTimeWait) && cacheLineAccessIter < cacheLineAccess)
-    {
-        cacheLineAccessIter++;
-        volatile uint64_t addr1 = currentNode->addr;
-        accessTime[cacheLineAccessIter - 1] = measure_one_block_access_time(addr1);
-
-        if (accessTime[cacheLineAccessIter - 1] > 42)
-            misses++;
+        if (setNum == 0)
+            currentNode = setup->eviction_ll_0;
         else
-            hits++;
-        currentNode = currentNode->next;
-        // printf("accessTime is %d", accessTime);
+            currentNode = setup->eviction_ll_1;
+
+        clock_t start_t, curr_t, end_t;
+        volatile int totalTime = 0;
+        volatile int cacheLineAccess = 6, cacheLineAccessIter = 0;
+
+        // prime stage
+        start_t = clock();
+        while (currentNode != NULL && clock() - start_t < setup->primeTimeWait && cacheLineAccessIter < cacheLineAccess)
+        {
+            cacheLineAccessIter++;
+            volatile uint64_t addr1 = currentNode->addr;
+            one_block_access(addr1);
+            currentNode = currentNode->next;
+        };
+
+        // acccess interval
+        start_t = clock();
+        while (clock() - start_t < (setup->accessTimeWait))
+        {
+        };
+
+        // probe stage
+        if (setNum == 0)
+            currentNode = setup->eviction_ll_0;
+        else
+            currentNode = setup->eviction_ll_1;
+        volatile uint64_t accessTime[4];
+
+        cacheLineAccess = 4;
+        cacheLineAccessIter = 0;
+        start_t = clock();
+        while (currentNode != NULL && clock() - start_t < setup->probeTimeWait && cacheLineAccessIter < cacheLineAccess)
+        {
+            cacheLineAccessIter++;
+            volatile uint64_t addr1 = currentNode->addr;
+            accessTime[cacheLineAccessIter - 1] = measure_one_block_access_time(addr1);
+
+            if (accessTime[cacheLineAccessIter - 1] > 37)
+                misses[setNum]++;
+            else
+                hits[setNum]++;
+            currentNode = currentNode->next;
+            // printf("accessTime is %ld", accessTime[cacheLineAccessIter]);
+        }
     }
 
-    if (hits == 1 && misses == 3)
-        return 0;
-    else if (hits == 3 && misses == 1)
+    if (misses[1] >= 4 && hits[1] <= 0)
         return 1;
-    else if (hits == 4)
-        return 5;
-    else if (misses == 4)
-        return 4;
-    else if (hits + misses < 4)
-        return 2;
-    else if (hits == 2 && misses == 2)
-        return 6;
-    else
+    else if (misses[0] >= 4 && hits[0] <= 0)
+        return 0;
+    else if (misses[1] == 0 && misses[0] == 0)
         return 3;
-
-    }
-
-    
+    else if (misses[1] <= 2 && misses[0] <= 2)
+        return 2;
+    else
+        return 4;
 }
 int receiver_config(struct setup *setup)
 {
@@ -85,10 +88,9 @@ int receiver_config(struct setup *setup)
     *((char *)buf) = 1; // dummy write to trigger page allocation
 
     setup->eviction_buffer = buf;
-
-    setup->primeTimeWait = 150;
-    setup->probeTimeWait = 150;
-    setup->accessTimeWait = 70;
+    setup->primeTimeWait = 1500;
+    setup->probeTimeWait = 1500;
+    setup->accessTimeWait = 1200;
     setup->eviction_ll_0 = create_eviction_set(setup, 0);
     setup->eviction_ll_1 = create_eviction_set(setup, 1);
 }

@@ -62,9 +62,9 @@ int sender_config(struct setup *setup)
 
     setup->eviction_buffer = buf;
 
-    setup->primeTimeWait = 150;
-    setup->probeTimeWait = 150;
-    setup->accessTimeWait = 70;
+    setup->primeTimeWait = 1500;
+    setup->probeTimeWait = 1500;
+    setup->accessTimeWait = 1200;
 
     setup->eviction_ll_0 = create_eviction_set(setup, 0);
     setup->eviction_ll_1 = create_eviction_set(setup, 1);
@@ -93,7 +93,11 @@ int main(int argc, char **argv)
     {
         // char text_buf[128];
         // send_bit(setupStruct, 0);
-        send_bit(setupStruct, 0);
+        send_bit(setupStruct, 1);
+        send_bit(setupStruct, 1);
+        send_bit(setupStruct, 1);
+        send_bit(setupStruct, 1);
+        send_bit(setupStruct, 1);
         // send_bit(setupStruct, 0);
         // fgets(text_buf, sizeof(text_buf), stdin);
 

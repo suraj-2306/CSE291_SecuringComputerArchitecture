@@ -133,10 +133,12 @@ void add_to_ll(uint64_t addr, struct Node **ll)
 
 uint64_t get_set_index_from_virt_addr(uint64_t virt_addr)
 {
-    return (virt_addr >> L2_BYTES_PER_LINE_LOG2) & L2_SETS_LOG2;
+    uint64_t setNum =
+        (virt_addr >> L2_BYTES_PER_LINE_LOG2) & (L2_SETS - 1);
+    return setNum;
 }
 
-void create_eviction_set(struct setup *setupStruct, int setNum)
+struct Node *create_eviction_set(struct setup *setupStruct, int setNum)
 {
     int ll_len = 0;
     // int setNum = setupStruct->startComSet;
