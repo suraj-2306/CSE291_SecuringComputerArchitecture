@@ -1,159 +1,83 @@
-
 #include "util.h"
+#include <stdlib.h>
+#include <stdio.h>
+#include <string.h>
 
-/* Measure the time it takes to access a block with virtual address addr. */
-CYCLES measure_one_block_access_time(ADDR_PTR addr)
+CYCLES measure_one_block_access_time(volatile ADDR_PTR addr)
 {
     CYCLES cycles;
-
-    asm volatile("mov %1, %%r8\n\t"
-                 "lfence\n\t"
-                 "rdtsc\n\t"
-                 "mov %%eax, %%edi\n\t"
-                 "mov (%%r8), %%r8\n\t"
-                 "lfence\n\t"
-                 "rdtsc\n\t"
-                 "sub %%edi, %%eax\n\t"
-                 : "=a"(cycles) /*output*/
-                 : "r"(addr)
-                 : "r8", "edi");
-
+    asm volatile(
+        "mov %1, %%r8\n\t"
+        "lfence\n\t"
+        "rdtsc\n\t"
+        "mov %%eax, %%edi\n\t"
+        "mov (%%r8), %%r8\n\t"
+        "lfence\n\t"
+        "rdtsc\n\t"
+        "sub %%edi, %%eax\n\t"
+        : "=a"(cycles)
+        : "r"(addr)
+        : "r8", "edi");
     return cycles;
 }
 
-/*
- * CLFlushes the given address.
- *
- * Note: clflush is provided to help you debug and should not be used in your
- * final submission
- */
-void clflush(ADDR_PTR addr)
+void add_to_ll(volatile uint64_t addr, volatile struct Node **ll)
 {
-    asm volatile("clflush (%0)" ::"r"(addr));
-}
-
-/*
- * Converts a string to its binary representation.
- */
-char *string_to_binary(char *s)
-{
-    if (s == NULL)
-        return 0; /* no input string */
-
-    size_t len = strlen(s);
-
-    // Each char is one byte (8 bits) and + 1 at the end for null terminator
-    char *binary = malloc(len * 8 + 1);
-    binary[len] = '\0';
-
-    for (size_t i = 0; i < len; ++i)
-    {
-        char ch = s[i];
-        for (int j = 7; j >= 0; --j)
-        {
-            if (ch & (1 << j))
-            {
-                strcat(binary, "1");
-            }
-            else
-            {
-                strcat(binary, "0");
-            }
-        }
-    }
-
-    return binary;
-}
-
-/*
- * Converts a binary string to its ASCII representation.
- */
-char *binary_to_string(char *data)
-{
-    // Each char is 8 bits
-    size_t msg_len = strlen(data) / 8;
-
-    // Add one for null terminator at the end
-    char *msg = malloc(msg_len + 1);
-    msg[msg_len] = '\0';
-
-    for (int i = 0; i < msg_len; i++)
-    {
-        char tmp[8];
-        int k = 0;
-
-        for (int j = i * 8; j < ((i + 1) * 8); j++)
-        {
-            tmp[k++] = data[j];
-        }
-
-        msg[i] = strtol(tmp, 0, 2);
-    }
-
-    return msg;
-}
-
-/*
- * Converts a string to integer
- */
-int string_to_int(char *s)
-{
-    return atoi(s);
-}
-
-// Function to add a new node to the end of the linked list
-void add_to_ll(uint64_t addr, struct Node **ll)
-{
-    // If the list is empty, create a new node and set it as the head
     if (*ll == NULL)
     {
         *ll = (struct Node *)malloc(sizeof(struct Node));
-        assert(*ll != NULL && "Memory allocation failed!");
+        assert(*ll != NULL);
         (*ll)->addr = addr;
         (*ll)->next = NULL;
         return;
     }
-
-    // If the list is not empty, traverse to the last node
-    struct Node *nodeIter = *ll;
+    volatile struct Node *nodeIter = *ll;
     while (nodeIter->next != NULL)
     {
         nodeIter = nodeIter->next;
     }
-
-    // Create a new node and append it to the end of the list
     struct Node *newNode = (struct Node *)malloc(sizeof(struct Node));
-    assert(newNode != NULL && "Memory allocation failed!");
+    assert(newNode != NULL);
     newNode->addr = addr;
     newNode->next = NULL;
-
-    // Link the new node to the last node
     nodeIter->next = newNode;
 }
 
-uint64_t get_set_index_from_virt_addr(uint64_t virt_addr)
+void create_eviction_sets(volatile struct setup *setupStruct)
 {
-    uint64_t setNum =
-        (virt_addr >> L2_BYTES_PER_LINE_LOG2) & (L2_SETS - 1);
-    return setNum;
-}
+    // Initialize the eviction linked lists
+    for (int i = 0; i < L2_SETS_COMM; i++)
+    {
+        setupStruct->eviction_ll[i] = NULL;
+    }
 
-struct Node *create_eviction_set(struct setup *setupStruct, int setNum)
-{
-    int ll_len = 0;
-    // int setNum = setupStruct->startComSet;
-    struct Node *eviction_ll = NULL;
-    for (int set = 0; set < L2_SETS; set++)
-        for (int line = 0; line < L2_LINES_PER_SET; line++)
+    // Create eviction sets for all L2 cache sets
+    int setidcount = 0;
+
+    for (volatile int set = 0; set < L2_SETS; set++)
+    {
+        for (volatile int line = 0; line < L2_LINES_PER_SET; line++)
         {
-            uint64_t virt_addr = (uint64_t)(setupStruct->eviction_buffer) + set * (L2_BYTES_PER_LINE * L2_LINES_PER_SET) + line * L2_BYTES_PER_LINE;
-            if (get_set_index_from_virt_addr(virt_addr) == setNum)
+            volatile uint64_t virt_addr =
+                (volatile uint64_t)(setupStruct->eviction_buffer) +
+                set * (L2_BYTES_PER_LINE * L2_LINES_PER_SET) +
+                line * L2_BYTES_PER_LINE;
+
+            volatile uint64_t set_index = get_set_index_from_virt_addr(virt_addr);
+
+            if (set_index < 256)
             {
-                ll_len++;
-                add_to_ll(virt_addr, &eviction_ll);
+                if (set_index == 4)
+                    setidcount++;
+                add_to_ll(virt_addr, (volatile struct Node **)&(setupStruct->eviction_ll[set_index]));
             }
         }
-    // setupStruct->eviction_ll = eviction_ll;
-    return eviction_ll;
-    // printf("ll_len %d\n",ll_len);
+    }
+}
+
+volatile uint64_t get_set_index_from_virt_addr(volatile uint64_t virt_addr)
+{
+    volatile uint64_t setNum =
+        (virt_addr >> L2_BYTES_PER_LINE_LOG2) & (L2_SETS - 1);
+    return setNum;
 }
