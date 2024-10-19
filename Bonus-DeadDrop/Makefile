@@ -6,10 +6,10 @@ UTILS=util.o
 all: $(TARGETS)
 
 $(UTILS): %.o: %.c %.h
-	$(CC) $(CFLAGS) -c $<
+	$(CC) $(CFLAGS) -c -g $< 
 
 %.o: %.c util.h
-	$(CC) $(CFLAGS)  -c $< 
+	$(CC) $(CFLAGS)  -c -g $< 
 
 $(TARGETS): %:%.o util.o
 	$(CC) $(CFLAGS) $^ -o $@

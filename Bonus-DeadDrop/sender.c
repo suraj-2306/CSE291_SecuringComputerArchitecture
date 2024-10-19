@@ -13,29 +13,26 @@ void send_bit(volatile struct setup *setup, volatile uint8_t bit)
     // Select the eviction set based on the bit value (set number)
     currentNode = setup->eviction_ll[bit];
 
-    // Wait stage: Wait for the specified prime time before accessing cache lines
-    volatile clock_t start_t = rdtsc();
-    while ((rdtsc() - start_t) < setup->primeTimeWait)
-    {
-        asm volatile("" ::: "memory");
-    }
-
     // Access stage: Access the cache lines in the selected eviction set
-    start_t = rdtsc();
-    while (currentNode != NULL &&
-           (rdtsc() - start_t) < setup->accessTimeWait &&
-           cacheLineAccessIter < cacheLineAccess)
+    volatile clock_t start_t = rdtsc();
+    while ((rdtsc() - start_t) < setup->accessTimeWait)
     {
-        // printf("iter %d\n", cacheLineAccessIter);
-        cacheLineAccessIter++;
-        volatile uint64_t *addr = (volatile uint64_t *)currentNode->addr;
-
-        for (volatile int n = 0; n < 3; n++)
+        cacheLineAccessIter = 0;
+        while (currentNode != NULL &&
+               cacheLineAccessIter < cacheLineAccess)
         {
-            one_block_access((volatile uint64_t)addr);
-        }
+            // printf("iter %d\n", cacheLineAccessIter);
 
-        currentNode = currentNode->next;
+            volatile uint64_t *addr = (volatile uint64_t *)currentNode->addr;
+
+            for (volatile int n = 0; n < 2; n++)
+            {
+                one_block_access((volatile uint64_t)addr);
+            }
+            // printf("set no %d, cachelineIter %d\n", bit, cacheLineAccessIter);
+            cacheLineAccessIter++;
+            currentNode = currentNode->next;
+        }
     }
 
     start_t = rdtsc();
@@ -72,11 +69,30 @@ int main()
     volatile struct setup *setupStruct = (struct setup *)malloc(sizeof(struct setup));
     sender_config(setupStruct);
 
-    uint8_t bit_to_send = 123; // Example bit (set number) to send
+    uint8_t bit_to_send = 12; // Example bit (set number) to send
 
     while (1)
     {
-        send_bit(setupStruct, bit_to_send);
+        // Prompt the user for input
+        printf("Enter a number between 0 and %d (inclusive): ", L2_SETS_DEFINE);
+        int input;
+        int result = scanf("%d", &input);
+
+        // Check if the input is valid and within the range
+        if (result == 1 && input >= 0 && input <= L2_SETS_DEFINE)
+        {
+            bit_to_send = (uint8_t)input;       // Cast the valid input to uint8_t
+            send_bit(setupStruct, bit_to_send); // Send the bit
+            while (1)
+                ;
+        }
+        else
+        {
+            printf("Invalid input! Please enter a number between 0 and %d.\n", L2_SETS_DEFINE);
+            // Clear the input buffer to avoid infinite loop on invalid input
+            while (getchar() != '\n')
+                ;
+        }
     }
 
     printf("Sender finished.\n");
